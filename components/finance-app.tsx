@@ -1,12 +1,19 @@
 "use client";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { employees, employee } from "@/lib/employees";
-import { allocationLabel, financials } from "@/lib/domain";
+import { allocationLabel, commission, financials } from "@/lib/domain";
 import { homeworkSeed } from "@/lib/seed-data";
 import type { Allocation, EmployeeId, Split, Transaction } from "@/lib/types";
 
 type Page =
-  "overview" | "transactions" | "new" | "approvals" | "test" | "setup" | "how";
+  | "overview"
+  | "transactions"
+  | "new"
+  | "approvals"
+  | "lab"
+  | "test"
+  | "setup"
+  | "how";
 const money = (c: number) =>
   new Intl.NumberFormat("en-IE", { style: "currency", currency: "EUR" }).format(
     c / 100,
@@ -115,6 +122,7 @@ export function FinanceApp({
               ...(manager
                 ? [
                     ["approvals", `Approvals ${pending.length}`],
+                    ["lab", "Decision lab"],
                     ["setup", "Manager setup"],
                   ]
                 : []),
@@ -156,6 +164,8 @@ export function FinanceApp({
                   ? "Manager approvals"
                   : page === "setup"
                     ? "Manager setup"
+                  : page === "lab"
+                    ? "Decision lab"
                     : page === "test"
                       ? "Test this system"
                       : page === "how"
@@ -191,6 +201,8 @@ export function FinanceApp({
           <NewTransaction actor={actor} done={refresh} />
         ) : page === "approvals" && manager ? (
           <Approvals records={pending} done={refresh} />
+        ) : page === "lab" && manager ? (
+          <DecisionLab records={records} />
         ) : page === "setup" && manager ? (
           <Setup />
         ) : page === "test" ? (
@@ -204,6 +216,168 @@ export function FinanceApp({
         </footer>
       </main>
     </div>
+  );
+}
+
+function DecisionLab({ records }: { records: Transaction[] }) {
+  const pending = records.filter(
+    (t) =>
+      !t.testRecord &&
+      (t.status === "pending_approval" || t.status === "awaiting_allocation"),
+  );
+  const [selectedReference, setSelectedReference] = useState(
+    pending[0]?.reference ?? "",
+  );
+  const selected =
+    pending.find((t) => t.reference === selectedReference) ?? pending[0];
+  const [allocation, setAllocation] = useState<Allocation>("A");
+  const before = financials(records);
+
+  if (!selected)
+    return (
+      <section className="card hero-lab">
+        <span className="lab-kicker">BONUS · DECISION INTELLIGENCE</span>
+        <h2>Every assessed decision is complete</h2>
+        <p>The lab will activate again when a transaction needs approval.</p>
+      </section>
+    );
+
+  const simulated = records.map((record) => {
+    if (record.id !== selected.id) return record;
+    if (record.type === "sale") {
+      const split = record.proposedSplit!;
+      const earned = commission(record.amountCents, split);
+      return {
+        ...record,
+        status: "approved" as const,
+        approvedSplit: split,
+        commissionPoolCents: earned.pool,
+        commissionRichardCents: earned.richard,
+        commissionAnastasiaCents: earned.anastasia,
+        commissionJeanClaudeCents: earned.jeanClaude,
+      };
+    }
+    return {
+      ...record,
+      status: "approved" as const,
+      finalAllocation: allocation,
+    };
+  });
+  const after = financials(simulated);
+  const projectName = (project: "A" | "B") =>
+    project === "A" ? "Respectable Relatives" : "Drunk University Friends";
+  const deltas = [
+    ["Company result", before.result, after.result],
+    ["Approved income", before.income, after.income],
+    ["Total commission", before.commissions, after.commissions],
+    ["Project A result", before.projects[0].result, after.projects[0].result],
+    ["Project B result", before.projects[1].result, after.projects[1].result],
+  ] as const;
+
+  return (
+    <>
+      <section className="card hero-lab">
+        <div>
+          <span className="lab-kicker">BONUS · DECISION INTELLIGENCE</span>
+          <h2>Preview the future before approving it</h2>
+          <p>
+            This read-only scenario engine applies a pending decision to an
+            in-memory copy of the ledger. It never changes Supabase, Telegram,
+            Google Sheets, or the assessed totals.
+          </p>
+        </div>
+        <div className="lab-seal" aria-label="Safe simulation">
+          <b>0</b>
+          <span>records changed</span>
+        </div>
+      </section>
+      <div className="grid2 lab-grid">
+        <section className="card">
+          <div className="section-head">
+            <h2>Scenario controls</h2>
+            <span>Read-only</span>
+          </div>
+          <label>
+            Pending transaction
+            <select
+              value={selected.reference}
+              onChange={(e) => setSelectedReference(e.target.value)}
+            >
+              {pending.map((t) => (
+                <option key={t.id} value={t.reference}>
+                  {t.reference} · {t.type === "sale" ? "Sale" : "Expense"} · {money(t.amountCents)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="scenario-summary">
+            <b>{selected.reference}</b>
+            <strong>{money(selected.amountCents)}</strong>
+            <p>{selected.description}</p>
+          </div>
+          {selected.type === "expense" ? (
+            <label>
+              Simulated final allocation
+              <select
+                value={allocation}
+                onChange={(e) => setAllocation(e.target.value as Allocation)}
+              >
+                <option value="A">A · Respectable Relatives</option>
+                <option value="B">B · Drunk University Friends</option>
+                <option value="OVERHEAD">Company overhead</option>
+              </select>
+            </label>
+          ) : (
+            <div className="split-preview">
+              <span>Proposed commission split</span>
+              <b>Richard {selected.proposedSplit?.richard}%</b>
+              <b>Anastasia {selected.proposedSplit?.anastasia}%</b>
+              <b>Jean-Claude {selected.proposedSplit?.jeanClaude}%</b>
+            </div>
+          )}
+        </section>
+        <section className="card">
+          <div className="section-head">
+            <h2>Executive insight</h2>
+            <span>Instant calculation</span>
+          </div>
+          <div className="insight-number">
+            <span>Projected company result</span>
+            <b>{money(after.result)}</b>
+            <em className={after.result - before.result >= 0 ? "up" : "down"}>
+              {after.result - before.result >= 0 ? "+" : ""}
+              {money(after.result - before.result)} from current
+            </em>
+          </div>
+          <p>
+            {selected.type === "sale"
+              ? `Approving ${selected.reference} adds ${money(selected.amountCents)} of income and ${money(after.commissions - before.commissions)} of commission to ${projectName(selected.project!)}.`
+              : allocation === "OVERHEAD"
+                ? `${selected.reference} is already included in the company result; confirming overhead changes only the reconciliation classification.`
+                : `${selected.reference} is already included in the company result. Allocation moves ${money(selected.amountCents)} into ${projectName(allocation)} without counting it twice.`}
+          </p>
+        </section>
+      </div>
+      <section className="card">
+        <div className="section-head">
+          <h2>Before-and-after impact</h2>
+          <span>Calculated from the live ledger</span>
+        </div>
+        <div className="impact-table">
+          <div className="impact-head"><span>Metric</span><span>Now</span><span>Scenario</span><span>Change</span></div>
+          {deltas.map(([label, current, projected]) => (
+            <div key={label}>
+              <b>{label}</b>
+              <span>{money(current)}</span>
+              <span>{money(projected)}</span>
+              <strong className={projected - current >= 0 ? "up" : "down"}>
+                {projected - current >= 0 ? "+" : ""}{money(projected - current)}
+              </strong>
+            </div>
+          ))}
+        </div>
+      </section>
+    </>
   );
 }
 
