@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "incremental": false,
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "outDir": "work/test-dist",
+    "verbatimModuleSyntax": false
+  },
+  "include": [
+    "lib/domain.ts",
+    "lib/employees.ts",
+    "lib/seed-data.ts",
+    "lib/types.ts",
+    "tests/**/*.test.ts"
+  ]
+}
