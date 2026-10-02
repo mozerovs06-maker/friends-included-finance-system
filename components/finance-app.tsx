@@ -206,7 +206,12 @@ export function FinanceApp({
         ) : page === "setup" && manager ? (
           <Setup />
         ) : page === "test" ? (
-          <TestPage config={config} />
+          <TestPage
+            config={config}
+            records={records}
+            manager={manager}
+            done={refresh}
+          />
         ) : (
           <How />
         )}
@@ -1043,14 +1048,26 @@ function Setup() {
 
 function TestPage({
   config,
+  records,
+  manager,
+  done,
 }: {
   config: { telegramUrl: string; sheetUrl: string };
+  records: Transaction[];
+  manager: boolean;
+  done: () => void;
 }) {
   const stamp = useMemo(
     () => Math.random().toString(36).slice(2, 9).toUpperCase(),
     [],
   );
   const [message, setMessage] = useState("");
+  const testRecords = records.filter((record) => record.testRecord);
+  const testPending = testRecords.filter(
+    (record) =>
+      record.status === "pending_approval" ||
+      record.status === "awaiting_allocation",
+  );
   const link = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
@@ -1123,12 +1140,43 @@ function TestPage({
             Test approvals use the same decision code and notification path
             while remaining excluded from assessed calculations.
           </p>
-          <div className="empty">
-            Submit a test transaction, then select Svetlana and review its
-            isolated test status.
-          </div>
+          {!manager ? (
+            <div className="empty">
+              Select Svetlana to review and decide isolated test records.
+            </div>
+          ) : testRecords.length === 0 ? (
+            <div className="empty">
+              Submit a test transaction in Telegram, then refresh this page.
+            </div>
+          ) : (
+            <div className="test-summary">
+              <strong>{testRecords.length} isolated test record(s)</strong>
+              <span>{testPending.length} awaiting a manager decision</span>
+            </div>
+          )}
         </div>
       </section>
+      {manager && testPending.length > 0 && (
+        <section className="test-manager">
+          <Approvals records={testPending} done={done} />
+        </section>
+      )}
+      {manager && testRecords.length > 0 && (
+        <section className="test-manager">
+          <Ledger
+            records={testRecords}
+            manager={false}
+            retry={async () => {
+              await fetch("/api/retry", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ actorId: "svetlana" }),
+              });
+              await done();
+            }}
+          />
+        </section>
+      )}
     </>
   );
 }
