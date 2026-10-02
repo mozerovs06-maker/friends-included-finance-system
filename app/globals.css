@@ -373,6 +373,22 @@ em,
   grid-template-columns: 1fr 1fr;
   gap: 1rem;
 }
+.test-manager {
+  margin-top: 1rem;
+}
+.test-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #f5f8fc;
+}
+.test-summary span {
+  color: var(--muted);
+}
 .steps code,
 .card > code {
   display: block;
