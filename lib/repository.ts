@@ -108,6 +108,18 @@ export async function telegramLink(userId: string) {
   return data as { employee_id: EmployeeId; current_chat_id: string } | null;
 }
 
+export async function telegramLinkForEmployee(employeeId: EmployeeId) {
+  const { data, error } = await serverDb()
+    .from("telegram_links")
+    .select("current_chat_id")
+    .eq("employee_id", employeeId)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.current_chat_id ? String(data.current_chat_id) : null;
+}
+
 export async function saveTelegramLink(
   userId: string,
   employeeId: EmployeeId,
