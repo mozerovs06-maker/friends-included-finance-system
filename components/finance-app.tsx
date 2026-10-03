@@ -164,13 +164,13 @@ export function FinanceApp({
                   ? "Manager approvals"
                   : page === "setup"
                     ? "Manager setup"
-                  : page === "lab"
-                    ? "Decision lab"
-                    : page === "test"
-                      ? "Test this system"
-                      : page === "how"
-                        ? "How it works"
-                        : "Transactions"}
+                    : page === "lab"
+                      ? "Decision lab"
+                      : page === "test"
+                        ? "Test this system"
+                        : page === "how"
+                          ? "How it works"
+                          : "Transactions"}
           </h1>
           <button className="secondary" onClick={refresh}>
             {loading ? "Loading…" : "Refresh"}
@@ -310,7 +310,8 @@ function DecisionLab({ records }: { records: Transaction[] }) {
             >
               {pending.map((t) => (
                 <option key={t.id} value={t.reference}>
-                  {t.reference} · {t.type === "sale" ? "Sale" : "Expense"} · {money(t.amountCents)}
+                  {t.reference} · {t.type === "sale" ? "Sale" : "Expense"} ·{" "}
+                  {money(t.amountCents)}
                 </option>
               ))}
             </select>
@@ -369,14 +370,20 @@ function DecisionLab({ records }: { records: Transaction[] }) {
           <span>Calculated from the live ledger</span>
         </div>
         <div className="impact-table">
-          <div className="impact-head"><span>Metric</span><span>Now</span><span>Scenario</span><span>Change</span></div>
+          <div className="impact-head">
+            <span>Metric</span>
+            <span>Now</span>
+            <span>Scenario</span>
+            <span>Change</span>
+          </div>
           {deltas.map(([label, current, projected]) => (
             <div key={label}>
               <b>{label}</b>
               <span>{money(current)}</span>
               <span>{money(projected)}</span>
               <strong className={projected - current >= 0 ? "up" : "down"}>
-                {projected - current >= 0 ? "+" : ""}{money(projected - current)}
+                {projected - current >= 0 ? "+" : ""}
+                {money(projected - current)}
               </strong>
             </div>
           ))}
@@ -1062,6 +1069,7 @@ function TestPage({
     [],
   );
   const [message, setMessage] = useState("");
+  const [telegramUserId, setTelegramUserId] = useState("");
   const testRecords = records.filter((record) => record.testRecord);
   const testPending = testRecords.filter(
     (record) =>
@@ -1071,16 +1079,59 @@ function TestPage({
   const link = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
+    const userId = String(f.get("user") ?? "");
     const r = await fetch("/api/test-link", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        telegramUserId: f.get("user"),
+        telegramUserId: userId,
         role: f.get("role"),
       }),
     });
     const d = await r.json();
-    setMessage(r.ok ? "Test role linked. Continue in Telegram." : d.error);
+    if (r.ok) setTelegramUserId(userId);
+    setMessage(
+      r.ok
+        ? "Test role linked. Telegram commands and website test entry are ready."
+        : d.error,
+    );
+  };
+  const websiteTest = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const form = new FormData(e.currentTarget);
+    const type = String(form.get("type"));
+    const sale = type === "sale";
+    const body: Record<string, unknown> = {
+      actorId: sale ? "richard" : "kevin",
+      type,
+      telegramUserId,
+      reference: form.get("reference"),
+      amountCents: Math.round(Number(form.get("amount")) * 100),
+      description: form.get("description"),
+    };
+    if (sale)
+      Object.assign(body, {
+        customer: "Website Test Customer",
+        project: "A",
+        proposedSplit: { richard: 50, anastasia: 30, jeanClaude: 20 },
+      });
+    else
+      Object.assign(body, {
+        category: "Travel",
+        proposedAllocation: "A",
+      });
+    const response = await fetch("/api/transactions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await response.json();
+    setMessage(
+      response.ok
+        ? `${data.reference} saved from the website. Check Telegram for the acknowledgement.`
+        : data.error,
+    );
+    if (response.ok) await done();
   };
   return (
     <>
@@ -1110,7 +1161,15 @@ function TestPage({
             Public linking is restricted to isolated test roles. The manager key
             is never exposed.
           </p>
-          <Field label="Telegram user ID" name="user" />
+          <label>
+            Telegram user ID
+            <input
+              name="user"
+              required
+              value={telegramUserId}
+              onChange={(event) => setTelegramUserId(event.target.value)}
+            />
+          </label>
           <Select
             label="Test role"
             name="role"
@@ -1134,6 +1193,46 @@ function TestPage({
           </code>
           <a href={config.sheetUrl}>Open Public Tests Sheet ↗</a>
         </div>
+        <form className="card form wide" onSubmit={websiteTest}>
+          <h2>3B · Test website → Telegram</h2>
+          <p>
+            After linking the matching test role above, save an isolated website
+            record. The server resolves the stored chat and Telegram sends the
+            acknowledgement and later manager decision.
+          </p>
+          <Select
+            label="Website test type"
+            name="type"
+            options={[
+              ["sale", "Sale · link the test salesperson role"],
+              ["expense", "Expense · link the test expense reporter role"],
+            ]}
+          />
+          <Field
+            label="TST- reference"
+            name="reference"
+            defaultValue={`TST-W-${stamp}`}
+          />
+          <Field
+            label="Amount · EUR"
+            name="amount"
+            type="number"
+            min="0.01"
+            step="0.01"
+            defaultValue="5.00"
+          />
+          <label className="wide">
+            Description
+            <textarea
+              name="description"
+              required
+              defaultValue="Website to Telegram acknowledgement test"
+            />
+          </label>
+          <button disabled={!telegramUserId}>
+            Submit isolated website test
+          </button>
+        </form>
         <div className="card wide">
           <h2>4 · Manager test view</h2>
           <p>
